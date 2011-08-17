@@ -1,0 +1,99 @@
+-----------------------------------------------
+-- Author:		Zhiqiang Ren
+-- Created:		07/22/2011
+-- Updated:
+-- Description: 	Environment class of the Speed Measure project
+-----------------------------------------------
+
+
+--
+-- class definition
+--
+class SpeedBox
+
+instance variables
+
+private counter: SpeedTypes`clock_tick := 0;
+private target: SpeedTypes`clock_tick := 10;
+private gen_interrupt: bool := false;
+
+private finished : bool := false;
+
+operations
+public SpeedBox: nat ==> SpeedBox
+SpeedBox (t) == (
+  counter := 0;
+  target := t;
+
+  gen_interrupt := false;
+  finished := false;
+  );
+
+public read_received_data: int ==> [SpeedTypes`position]
+read_received_data(ch) == return World`env.ReadPos()
+pre ch = 1 or ch = 2
+;
+
+public get_target: () ==> nat
+get_target () == return target;
+
+public set_target: nat ==> ()
+set_target (t) == target := t;
+
+private PeriodicOp: () ==> ()
+PeriodicOp () == 
+  -- duration(2)
+  (
+  counter := counter + 1;
+  if counter = target
+  then (
+    -- duration(1)
+    -- IO`print("reset counter\n");
+    counter := 0;
+    if gen_interrupt = true
+    then (
+      SM`KernelModule.interrupt_handler()
+    );
+  );
+);
+
+public initi_channel: () ==> ()
+initi_channel() == (
+  -- IO`print("SpeedBox::initi_channel\n");
+  gen_interrupt := true
+);
+
+public get_status: () ==> SpeedTypes`status
+get_status() == (
+  -- IO`print("SpeedBox::get_status\n"); 
+   return mk_SpeedTypes`status(<CH0_READY>, <CH1_NONE>)
+);  -- always valid
+
+public send_speed: int * SpeedTypes`clock_tick ==> ()
+send_speed(ch, tick) == (
+  counter := 0;
+  target := tick
+  )
+pre ch = 1 or ch = 2 and tick > 1
+;
+
+public has_finished: () ==> ()
+has_finished() ==  skip;
+
+sync
+  mutex(PeriodicOp);
+  mutex(set_target);
+  mutex(read_received_data);
+  mutex(get_target, set_target);
+  mutex(initi_channel, PeriodicOp); -- cannot use this
+  per has_finished => finished;
+
+--
+-- Thread definition section
+--
+thread
+
+-- period of thread (period, jitter, delay, offset)
+periodic(250,0,0,0) (PeriodicOp)
+
+end SpeedBox

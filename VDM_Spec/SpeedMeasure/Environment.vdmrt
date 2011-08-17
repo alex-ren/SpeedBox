@@ -1,0 +1,116 @@
+-----------------------------------------------
+-- Author:		Zhiqiang Ren
+-- Created:		07/22/2011
+-- Updated:
+-- Description: 	Environment class of the Speed Measure project
+-----------------------------------------------
+
+--
+-- class definition
+--
+class Environment
+
+--
+-- instance variables
+--
+instance variables
+
+  private io       : IO := new IO();
+  private inlines  : seq of inline := [];
+  private simtime  : nat;
+  private finished : bool := false;
+  private pos1  : [SpeedTypes`position] := nil;
+  private pos2  : [SpeedTypes`position] := nil;
+
+
+--
+-- Types definition section
+--
+types
+
+-- Input file: PosIn, TimeIn
+public inline	= [SpeedTypes`position] * nat;
+
+--
+-- Operations definition section
+--
+operations
+ 
+public Environment: seq of char ==> Environment
+Environment(fname) ==
+ (def mk_ (-,mk_(t,input)) = io.freadval[nat * seq of inline](fname) 
+  in
+   (inlines := input;
+    simtime := t;
+    pos1 := 20;
+    pos2 := 75;
+   );
+ )
+pre fname <> []
+post inlines <> [] and simtime > 0;
+
+private CreateSignal: () ==> ()
+CreateSignal() ==
+ (if len inlines > 0
+  then (dcl curtime : nat := time;
+	def mk_ (posIn, timeIn) = hd inlines 
+        in
+         (
+         -- IO`print("current time is ");
+         -- IO`print(curtime);
+         -- IO`print("\n");
+         if timeIn <= curtime
+          then (SetPos(posIn);
+                duration(0)
+                -- IO`print("New pos values set: ");
+                duration(0)
+                -- IO`print(posIn);
+                duration(0)
+                -- IO`print(" at time: ");
+                duration(0)
+                -- IO`print(timeIn);
+                duration(0)
+                -- IO`print("\n");
+                inlines := tl inlines;
+                return
+               );
+         );
+       )  -- end of then
+  else (ShowResults();
+        finished := true;
+        return
+       );
+ );  -- end of if
+
+private ShowResults: () ==> ()
+ShowResults() ==
+  duration(0) IO`print("all is done\n");
+
+public SetPos: [SpeedTypes`position] ==> ()
+SetPos(p) == pos1 := p;
+
+public ReadPos: () ==> [SpeedTypes`position]
+ReadPos() ==   return pos1;
+
+
+public IsFinished: () ==> ()
+IsFinished() ==
+  skip;
+
+sync
+
+  mutex(ReadPos);
+  mutex(SetPos);
+  mutex(ReadPos, SetPos);
+  mutex(CreateSignal);	-- ADDED
+  per IsFinished => finished;
+
+--
+-- Thread definition section
+--
+thread
+
+-- period of thread (period, jitter, delay, offset)
+periodic(100,0,0,0) (CreateSignal)
+
+end Environment

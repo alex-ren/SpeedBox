@@ -1,0 +1,39 @@
+Overture version is Overture 1.1.
+
+
+Create the Overture project from the Git repository:
+
+Select File --> Import ... --> General - Existing Projects into Workspace --> Next
+Select browse... next to "Select root directory" and navigate to your Git repository
+
+
+
+
+
+
+
+
+
+----------------------------------------------------------
+Global setup:
+ Set up git
+  git config --global user.name "Your Name"
+  git config --global user.email alex.ren2006@gmail.com
+        Next steps:
+  mkdir SpeedBox
+  cd SpeedBox
+  git init
+  touch README
+  git add README
+  git commit -m 'first commit'
+  git remote add origin git@github.com:alex-ren/SpeedBox.git
+  git push -u origin master
+      Existing Git Repo?
+  cd existing_git_repo
+  git remote add origin git@github.com:alex-ren/SpeedBox.git
+  git push -u origin master
+      Importing a Subversion Repo?
+  Click here
+      When you're done:
+  Continue
+

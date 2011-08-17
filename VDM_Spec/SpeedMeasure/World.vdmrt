@@ -1,0 +1,43 @@
+-----------------------------------------------
+-- Author:		Zhiqiang Ren
+-- Created:		07/22/2011
+-- Updated:
+-- Description: 	Environment class of the Speed Measure project
+-----------------------------------------------
+
+--
+-- class definition
+--
+class World
+
+--
+-- instance variables
+--
+instance variables
+
+  public static env : [Environment] := nil;
+
+--
+-- Operations definition section
+--
+operations
+ 
+public World: () ==> World
+World() ==
+ (env := new Environment("scenario.txt");
+ -- HA`Host.AddNode(HA`TempNode.GetID(),HA`TempNode.GetType());
+  start(SM`SpeedBox);
+
+ );
+
+public Run: () ==> ()
+Run() ==
+ (-- start environment creating input
+  start(env);
+  let k = SM`KernelModule.initi_module() in ();
+  -- wait til environment has finished creating input
+  env.IsFinished();
+ );
+
+end World
+

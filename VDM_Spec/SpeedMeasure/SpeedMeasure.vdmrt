@@ -1,0 +1,46 @@
+system SM
+	
+instance variables
+
+-- Architecture definition
+
+/*
+Computing units:
+	Priority: <FP> - Fixed priority
+	          <PP> - Priority?
+
+*/
+
+  cpu1 : CPU := new CPU(<FCFS>, 1E9);
+  cpu2 : CPU := new CPU(<FCFS>, 1E9);
+
+/*
+Communication bus:
+ 	Modes: <CSMACD> - ?
+*/
+  bus : BUS := new BUS(<FCFS>, 1E9,{cpu1, cpu2});  -- bit per second
+
+
+-- TODO Define deployable objects as static instance variables
+public static SpeedBox: SpeedBox := new SpeedBox(1);
+public static KernelModule: KernelModule := new KernelModule();
+  --public static TempNode  : TemperatureSensor := new TemperatureSensor(1, <TEMPSENSOR>, 0);
+
+operations
+ 
+public SM : () ==> SM
+SM () == 
+(-- TODO Deploy deployable object to cpu's
+
+
+-- cpu1.deploy(deployableObject1,"Object 1");
+-- cpu1.setPriority( TODO: Static operation , 100);
+cpu1.deploy(KernelModule);
+cpu2.deploy(SpeedBox);
+-- cpu2.setPriority( TODO: Static operation , 100);
+
+-- CPU's are started implicit
+);
+
+end SM
+

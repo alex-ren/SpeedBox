@@ -1,0 +1,276 @@
+class KernelModule
+types
+-- TODO Define types here
+values
+-- TODO Define values here
+instance variables
+-- TODO Define instance variables here
+
+private status: SpeedTypes`status := mk_SpeedTypes`status(<CH0_NONE>, <CH1_NONE>);
+
+private last_pos: seq of (seq of [SpeedTypes`position]) := [[nil, nil, nil], [nil, nil, nil]];
+inv len last_pos = 2 and len last_pos(1) = 3 and len last_pos(2) = 3;
+
+private last_speed_period: seq of (seq of [SpeedTypes`clock_tick]) := [[nil, nil], [nil, nil]];
+inv len last_speed_period = 2 and len last_speed_period(1) = 2 and len last_speed_period(2) = 2;
+
+private speed_period: seq of [SpeedTypes`clock_tick] := [nil, nil];
+inv len speed_period = 2;
+
+private pulse: seq of bool := [false, false];
+inv len pulse = 2;
+
+private speed_rpm: seq of [SpeedTypes`rpm] := [nil, nil];
+inv len speed_rpm = 2;
+
+
+private latched_timestamp: seq of [SpeedTypes`latch_timeval] := [nil, nil];
+inv len latched_timestamp = 2;
+
+operations
+-- TODO Define operations here
+  public initi_module: () ==> int
+  initi_module () == (
+  
+    -- initi_configuration();
+    -- register interrupt
+    SM`SpeedBox.initi_channel();
+    return 0
+  );
+  
+  public KernelModule: () ==> KernelModule
+  KernelModule () == (
+    last_pos := [[nil, nil, nil], [nil, nil, nil]];
+    last_speed_period := [[nil, nil], [nil, nil]];
+    speed_period := [nil, nil];
+    pulse := [false, false];
+    speed_rpm := [nil, nil];
+    latched_timestamp := [nil, nil];
+  );
+
+  async public interrupt_handler: () ==> ()
+  interrupt_handler () == (
+    IO`print("interrupt_handler\n");
+    status := SM`SpeedBox.get_status();
+    if status.CH0 = <CH0_INT> or status.CH1 = <CH1_INT>
+    then (
+      IO`print("invalid interrupt status");
+      execution_error();
+      return
+      );
+
+    def - = update_internal_value(status) in skip;  -- make space available to store the new pos
+    if status.CH0 = <CH0_TIMEOUT> or status.CH1 = <CH1_TIMEOUT>
+    then (
+      IO`print("watchdog_interrupt");
+      handle_watchdog_interrupt(status)
+    );
+
+    if status.CH0 = <CH0_READY> or status.CH1 = <CH1_READY>
+    then (
+      handle_value_available(status)
+    );
+
+    if status.CH0 = <CH0_TIMEOUT> or status.CH0 = <CH0_READY> then
+      send_channel_speed(1)
+    ;
+    if status.CH1 = <CH1_TIMEOUT> or status.CH1 = <CH1_READY> then
+      send_channel_speed(2)
+    ;
+
+    -- todo update last ptp time
+  );
+
+  private send_channel_speed: int ==> ()
+  send_channel_speed(ch) == (
+    IO`print("current speed_rpm is ");
+    IO`print(speed_rpm(ch));
+    IO`print("\n");
+    last_speed_period(ch)(2) := last_speed_period(ch)(1);
+    last_speed_period(ch)(1) := speed_period(ch);
+
+    SM`SpeedBox.send_speed(ch, speed_period(ch));
+
+    IO`print("speed_period is "); 
+    IO`print(speed_period(ch));
+    IO`print("\n")
+  )
+  pre ch = 1 or ch = 2
+  ;
+
+  private handle_value_available: SpeedTypes`status ==> ()
+  handle_value_available(s) == (
+    if s.CH0 = <CH0_READY> then
+      handle_channel_value(1)
+    ;
+    if s.CH1 = <CH1_READY> then
+      handle_channel_value(2)
+    ;
+    )
+  pre s.CH0 = <CH0_READY> or s.CH1 = <CH1_READY>
+  ;
+
+  private handle_channel_value: int ==> ()
+  handle_channel_value(ch) == (
+    IO`print("handle_channel_value\n");
+    last_pos(ch)(1) := SM`SpeedBox.read_received_data(ch);
+    IO`print("SpeedBox.read_received_data is ");
+    IO`print(last_pos(ch)(1));
+    IO`print("\n");
+    if (last_pos(ch)(1) = nil or -- todo check the original code
+        last_pos(ch)(2) = nil or
+        last_pos(ch)(3) = nil or
+        last_speed_period(ch)(1) = nil or
+        last_speed_period(ch)(2) = nil) then
+      handle_not_enough_data_for_computation(ch)
+    else (
+        IO`print("handle_channel_value -- update\n");
+        (dcl difference: int := get_tick_difference(last_pos(ch)(1), last_pos(ch)(2)) +
+                       get_tick_difference(last_pos(ch)(2), last_pos(ch)(3));
+          if difference < 0 then difference := -difference;
+          def
+            time_difference: nat = get_time_difference(ch)  -- todo check the original code (two invocations)
+            -- cannot convert types explicitly, so I have to change the formula
+            -- new_peroid: nat = time_difference * (SpeedTypes`pos_range / difference) / SpeedTypes`conf_K
+            new_peroid: nat = time_difference * SpeedTypes`pos_range div (difference * SpeedTypes`conf_K)
+            tmp_rpm: real = (difference / SpeedTypes`pos_range) / (time_difference * 25 / 1000000000)  * 60
+          in
+            (
+            speed_period(ch) := new_peroid;
+            pulse(ch) := true;
+            speed_rpm(ch) := tmp_rpm
+            )
+        );
+        if speed_rpm(ch) < SpeedTypes`null_speed_rpm then (
+           speed_rpm(ch) := SpeedTypes`ERROR_SPEED_RPM;
+           speed_period(ch) := SpeedTypes`ERROR_PERIOD;
+           pulse(ch) := false
+        )
+    )
+  )
+
+  pre ch = 1 or ch = 2
+  ;
+
+
+  private handle_watchdog_interrupt: SpeedTypes`status ==> ()
+  handle_watchdog_interrupt(s) == (
+    if s.CH0 = <CH0_TIMEOUT> then
+      handle_channel_invalid(1)
+    ;
+    if s.CH1 = <CH1_TIMEOUT> then
+      handle_channel_invalid(2)
+    ;
+  )
+  pre s.CH0 = <CH0_TIMEOUT> or s.CH1 = <CH1_TIMEOUT>
+  ;
+
+  private handle_channel_invalid: int ==> ()
+  handle_channel_invalid(ch) == (
+    last_pos(ch)(1) := nil;
+    handle_not_enough_data_for_computation(ch)
+  )
+  pre ch = 1 or ch = 2
+  ;
+
+  private handle_not_enough_data_for_computation: int ==> ()
+  handle_not_enough_data_for_computation(ch) == (
+    -- IO`print("handle_not_enough_data_for_computation\n");
+    speed_period(ch) := SpeedTypes`ERROR_PERIOD;
+    pulse(ch) := false;
+    speed_rpm(ch) := SpeedTypes`ERROR_SPEED_RPM;
+  )
+  pre (ch = 1 or ch = 2) and
+    ((exists i in set inds last_pos & last_pos(ch)(i) = nil) or
+     (exists i in set inds last_speed_period & last_speed_period(ch)(i) = nil)
+    )
+  ;
+
+  private execution_error: () ==> ()
+  execution_error() == skip;  -- todo
+
+  private update_internal_value: SpeedTypes`status ==> int
+  update_internal_value(s) == (
+    if s.CH0 = <CH0_READY> or s.CH0 = <CH0_TIMEOUT>
+    then (
+         duration(0)
+         IO`print("update_internal_value\n");
+         if update_channel_internal_value(0) <> 0
+         then return -1
+         ;
+         )
+    ; 
+    if s.CH1 = <CH1_READY> or s.CH1 = <CH1_TIMEOUT>
+    then if update_channel_internal_value(1) <> 0
+         then return -1
+         else return 0
+    else return 0
+    )
+         
+  pre s.CH0 <> <CH0_INT> and s.CH1 <> <CH1_INT>
+  ;
+  
+  private update_channel_internal_value: int ==> int
+  update_channel_internal_value(ch) ==
+    if ch = 0 
+    then (
+          last_pos(1)(3) := last_pos(1)(2); 
+          last_pos(1)(2) := last_pos(1)(1); 
+          -- this is fake, should use ptp
+          latched_timestamp(1) := time;
+          return 0)
+    else (
+         last_pos(2)(3) := last_pos(2)(2); 
+         last_pos(2)(2) := last_pos(2)(1); 
+         -- this is fake, should use ptp
+         latched_timestamp(2) := time;
+         return 0)
+  pre ch = 0 or ch = 1
+  ;
+
+  static public foo: int ==> int
+  foo(x) == return x + 1
+  post RESULT = foo(x)
+  ;
+
+
+  public get_time_difference: int ==> nat
+  get_time_difference(ch) == return last_speed_period(ch)(1) + last_speed_period(ch)(2)
+  pre (ch = 1 or ch = 2) and last_speed_period(ch)(1) <> nil and last_speed_period(ch)(2) <> nil
+
+sync
+  mutex(interrupt_handler);
+  mutex(initi_module, interrupt_handler);
+
+functions
+  public get_tick_difference: SpeedTypes`position * SpeedTypes`position -> int
+  get_tick_difference(newdata, olddata) ==
+    if newdata > olddata then
+      if (newdata - olddata) > SpeedTypes`pos_range / 2 then
+        newdata - olddata - SpeedTypes`pos_range
+      else
+        newdata - olddata
+    else
+      if (olddata - newdata) > SpeedTypes`pos_range / 2 then
+        newdata - olddata + SpeedTypes`pos_range
+      else
+        newdata - olddata
+  post RESULT < SpeedTypes`pos_range / 2 and RESULT > -1 * SpeedTypes`pos_range / 2
+  ;
+
+public sum: int -> int
+sum(n) == if n = 0 then 1 else n + sum(n - 1)
+pre n >= 0;
+
+
+public sum2(n: int) r: int
+pre n >= 0
+post r = sum(n);
+
+
+
+
+traces
+-- TODO Define Combinatorial Test Traces here
+end KernelModule
+

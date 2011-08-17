@@ -1,0 +1,58 @@
+-----------------------------------------------
+-- Author:		Zhiqiang Ren
+-- Created:		07/22/2011
+-- Updated:
+-- Description: 	Environment class of the Speed Measure project
+-----------------------------------------------
+
+
+--
+-- class definition
+--
+class SpeedTypes
+
+values
+public pos_range: int = 3600;
+public conf_K: int = 25;
+public null_speed_rpm: real = 0.1;
+
+public ERROR_PERIOD: nat = 40000;  -- click ticks of SpeedBox
+public ERROR_SPEED_RPM: real = -1.0;
+public eps: real = 0.0001;
+
+-- public CH0_READY: nat = 1;
+-- public CH0_TIMEOUT: nat = 2;
+-- public CH0_INTERRUPT: nat = CH0_READY + CH0_INTERRUPT;
+
+-- public CH1_READY: nat = 4;
+-- public CH1_TIMEOUT: nat = 8;
+-- public CH1_INTERRUPT: nat = CH1_READY + CH1_INTERRUPT;
+
+-- public CH_TIMEOUT: nat = CH0_TIMEOUT + CH1_TIMEOUT;
+-- public CH_VALUE_AVAILABLE: nat = CH0_READY + CH1_READY;
+
+
+--
+-- Types definition section
+--
+types   
+  public position = nat
+  inv pos == pos >= 0 and pos < pos_range
+  ;
+
+  public rpm = real
+  inv s == s > 0 or s = ERROR_SPEED_RPM
+  ;
+
+  public latch_timeval = nat;
+  public clock_tick = nat;
+
+
+  public status :: 
+    CH0: <CH0_READY> | <CH0_TIMEOUT> | <CH0_INT> | <CH0_NONE>
+    CH1: <CH1_READY> | <CH1_TIMEOUT> | <CH1_INT> | <CH1_NONE>
+  ;
+           
+
+
+end SpeedTypes
